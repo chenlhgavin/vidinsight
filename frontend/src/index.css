@@ -1,0 +1,83 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* Layout */
+  --header-height: 40px;
+
+  /* Backgrounds */
+  --bg-page:    #ffffff;
+  --bg-panel:   #ffffff;
+  --bg-subtle:  #f7f7f7;
+  --bg-input:   #f7f7f7;
+  --bg-hover:   #f7f7f7;
+  --bg-active:  #f0f0f0;
+
+  /* Text — LongCut monochrome */
+  --text-primary:   #3f3f3f;
+  --text-secondary: #787878;
+  --text-muted:     #a0a0a0;
+  --text-body:      #3f3f3f;
+
+  /* Borders — lighter */
+  --border-default: #e5e5e5;
+  --border-light:   #efefef;
+  --border-input:   #e5e5e5;
+
+  /* Accent — monochrome primary (dark gray) */
+  --accent:       #3f3f3f;
+  --accent-hover: #555555;
+  --accent-light: #d0d0d0;
+  --accent-soft:  #f0f0f0;
+
+  /* Semantic — muted, only for critical states */
+  --success: #787878;
+  --error:   #dc3545;
+  --warning: #b45309;
+
+  /* Avatars — both gray */
+  --avatar-user-bg: #f0f0f0;
+  --avatar-user-fg: #787878;
+  --avatar-assistant-bg: #3f3f3f;
+  --avatar-assistant-fg: #ffffff;
+
+  /* Radii — LongCut-style generous rounds */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Shadows — none */
+  --shadow-sm: none;
+  --shadow-md: none;
+
+  /* Layout */
+  --max-content-width: 1800px;
+
+  /* Typography — Geist */
+  font-family: 'Geist Sans', 'Geist', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 400;
+  color: var(--text-primary);
+  background-color: var(--bg-page);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--bg-page);
+}
+
+#root {
+  width: 100%;
+}

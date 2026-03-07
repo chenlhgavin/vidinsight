@@ -1,0 +1,213 @@
+.note-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--bg-page);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* Selected snippet section */
+.note-editor-snippet {
+  padding: 16px 18px 12px;
+  background: var(--bg-subtle);
+}
+
+.note-editor-snippet-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.note-editor-snippet-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  border-left: 2px solid var(--border-default);
+  padding-left: 14px;
+  margin: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.note-editor-snippet-enhanced {
+  border-left-color: var(--accent);
+}
+
+/* Enhance button row */
+.note-editor-enhance-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.note-editor-enhance-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  transition: opacity 150ms ease;
+}
+
+.note-editor-enhance-btn:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.note-editor-enhance-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.note-editor-enhance-btn svg {
+  flex-shrink: 0;
+}
+
+@keyframes enhanceSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.note-editor-enhance-btn.enhancing svg {
+  animation: enhanceSpin 1s linear infinite;
+}
+
+.note-editor-enhance-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Your note section */
+.note-editor-note-section {
+  padding: 14px 18px;
+}
+
+.note-editor-note-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.note-editor-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 150ms ease;
+}
+
+.note-editor-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.note-editor-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* Bottom bar */
+.note-editor-bottom {
+  display: flex;
+  align-items: center;
+  padding: 10px 18px;
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border-default);
+  gap: 8px;
+}
+
+.note-editor-timestamp-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: inherit;
+}
+
+.note-editor-timestamp-display svg {
+  flex-shrink: 0;
+}
+
+.note-editor-timestamp-btn {
+  font-family: var(--font-mono, 'Geist Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: opacity 150ms ease;
+}
+
+.note-editor-timestamp-btn:hover {
+  opacity: 0.8;
+}
+
+.note-editor-bottom-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.note-editor-cancel-btn {
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  transition: opacity 150ms ease;
+}
+
+.note-editor-cancel-btn:hover {
+  opacity: 0.8;
+}
+
+.note-editor-save-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.note-editor-save-btn:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.note-editor-save-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}

@@ -1,0 +1,47 @@
+.status-banner {
+  border-radius: var(--radius-md);
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+.status-banner.running {
+  background: var(--bg-subtle);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.status-banner.success {
+  background: var(--bg-subtle);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.status-banner.error {
+  background: var(--bg-subtle);
+  border-color: var(--border-default);
+  color: var(--error);
+}
+
+.status-banner button {
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--error);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 10px;
+  transition: opacity 150ms ease;
+}
+
+.status-banner button:hover {
+  opacity: 0.8;
+}

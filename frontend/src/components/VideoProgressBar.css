@@ -1,0 +1,87 @@
+.vpb-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Timeline bar */
+.vpb-bar {
+  position: relative;
+  width: 100%;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+}
+
+.vpb-bar:hover {
+  border-color: var(--border-default);
+}
+
+/* Heatmap */
+.vpb-heatmap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  pointer-events: none;
+}
+
+.vpb-heatmap-bucket {
+  flex: 1;
+  height: 100%;
+  background: var(--text-muted);
+  transition: opacity 150ms ease;
+}
+
+/* Segments */
+.vpb-segment {
+  position: absolute;
+  top: 8px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 150ms ease;
+  z-index: 2;
+}
+
+.vpb-segment:hover {
+  opacity: 1 !important;
+}
+
+.vpb-segment.selected {
+  z-index: 3;
+  outline: 2px solid var(--text-primary);
+  outline-offset: -1px;
+}
+
+/* Current time cursor */
+.vpb-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff3b30;
+  z-index: 4;
+  pointer-events: none;
+  transition: left 0.1s linear;
+}
+
+.vpb-cursor-dot {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  background: #ff3b30;
+  border-radius: 50%;
+}
+
+/* Topic list */
+.vpb-topics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

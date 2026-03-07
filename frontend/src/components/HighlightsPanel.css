@@ -1,0 +1,101 @@
+.highlights-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+}
+
+.highlights-card {
+  position: relative;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.highlights-body {
+  padding: 12px 0;
+  transition: filter 150ms ease, opacity 150ms ease;
+}
+
+.highlights-body.blurred {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.highlights-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 0 4px;
+}
+
+.highlights-time {
+  font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.play-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.play-all-btn:hover {
+  opacity: 0.8;
+}
+
+.play-all-btn.playing {
+  background: transparent;
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.play-all-btn.playing:hover {
+  opacity: 0.8;
+}
+
+/* Loading overlay */
+.highlights-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.highlights-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid var(--text-muted);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: highlights-spin 0.6s linear infinite;
+}
+
+@keyframes highlights-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.highlights-loading-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}

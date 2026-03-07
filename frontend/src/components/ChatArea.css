@@ -1,0 +1,324 @@
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-page);
+  min-width: 0;
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.messages-container > .message + .message {
+  border-top: 1px solid var(--border-light);
+}
+
+.empty-chat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.empty-chat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.empty-chat-icon svg {
+  color: #fff;
+}
+
+.empty-chat h2 {
+  margin: 0 0 8px 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.empty-chat p {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.empty-chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+  justify-content: center;
+  max-width: 500px;
+}
+
+.empty-chat-chip {
+  height: 32px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-page);
+  color: var(--text-secondary);
+  border-radius: 16px;
+  font-size: 13px;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.empty-chat-chip:hover {
+  opacity: 0.8;
+}
+
+.model-selector-row {
+  max-width: 900px;
+  margin: 0 auto 6px;
+}
+
+.model-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.status-banner-wrap {
+  max-width: 900px;
+  margin: 0 auto 8px;
+}
+
+.quick-actions-row {
+  max-width: 900px;
+  margin: 0 auto 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+}
+
+.quick-action-btn {
+  height: 28px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-page);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.quick-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quick-action-btn:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.quick-action-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.model-selector {
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-page);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 150ms ease;
+}
+
+.model-selector:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.model-selector:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-container {
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--border-default);
+  background: var(--bg-page);
+}
+
+.input-form {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  background: #ffffff;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  transition: border-color 150ms ease;
+}
+
+.input-form:focus-within {
+  border-color: var(--accent);
+}
+
+.input-form textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: none;
+  font-family: inherit;
+  color: var(--text-primary);
+  padding: 4px 0;
+  max-height: 200px;
+}
+
+.input-form textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.input-form .model-selector-inline {
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-page);
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
+  align-self: center;
+  flex-shrink: 0;
+  transition: opacity 150ms ease;
+}
+
+.input-form .model-selector-inline:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.input-form .model-selector-inline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-form button[type="submit"] {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 150ms ease;
+}
+
+.input-form button[type="submit"]:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.input-form button[type="submit"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(1) { animation-delay: 0s; }
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+.status-text {
+  font-size: 14px;
+  color: var(--text-muted);
+  padding: 4px 0;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.loading-init {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.sidebar-toggle-btn {
+  display: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-page);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  left: 12px;
+  top: 64px;
+  z-index: 31;
+  transition: opacity 150ms ease;
+}
+
+.sidebar-toggle-btn:hover {
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .sidebar-toggle-btn {
+    display: flex;
+  }
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  top: 52px;
+  background: rgba(0, 0, 0, 0.2);
+  z-index: 29;
+}
+
+.sidebar-overlay.sidebar-overlay-visible {
+  display: block;
+}

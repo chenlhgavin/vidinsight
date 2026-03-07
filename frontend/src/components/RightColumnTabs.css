@@ -1,0 +1,97 @@
+.right-column-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.tabs-bar {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg-page);
+  border-bottom: 1px solid var(--border-light);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.tab-btn {
+  padding: 6px 16px;
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-family: inherit;
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.tab-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tab-btn.active {
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-active);
+  border-color: var(--border-default);
+}
+
+/* Transcript tab with translate icon + chevron */
+.tab-btn-translate {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tab-btn-translate .translate-icon {
+  color: var(--text-muted);
+  transition: color 150ms ease;
+}
+
+.tab-btn-translate:hover .translate-icon,
+.tab-btn-translate.active .translate-icon {
+  color: inherit;
+}
+
+.tab-btn-translate .translate-icon.highlight {
+  color: var(--accent);
+}
+
+.lang-chevron {
+  color: var(--text-muted);
+  transition: transform 150ms ease, color 150ms ease;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.lang-chevron:hover {
+  opacity: 0.8;
+  color: var(--text-primary);
+}
+
+.lang-chevron.open {
+  transform: rotate(180deg);
+}
+
+.tab-content {
+  flex-grow: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.tab-panel {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+}
+
+.tab-panel.hidden {
+  display: none;
+}

@@ -1,0 +1,36 @@
+.video-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  padding: 6px 12px;
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-default);
+  width: 100%;
+  background: var(--bg-page);
+}
+
+.video-header-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: opacity 150ms ease;
+}
+
+.video-header-back:hover {
+  opacity: 0.8;
+}
+
+.video-header-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
