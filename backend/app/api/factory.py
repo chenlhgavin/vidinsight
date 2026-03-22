@@ -178,14 +178,16 @@ def create_app(
             return response
         finally:
             duration_ms = (perf_counter() - start_time) * 1000
-            logger.info(
-                "api_request request_id=%s %s %s %s %.0fms",
-                request_id,
-                request.method,
-                request.url.path,
-                status_code,
-                duration_ms,
-            )
+            # Docker Compose healthcheck hits /healthz frequently; skip noisy logs on success.
+            if not (request.url.path == "/healthz" and status_code < 400):
+                logger.info(
+                    "api_request request_id=%s %s %s %s %.0fms",
+                    request_id,
+                    request.method,
+                    request.url.path,
+                    status_code,
+                    duration_ms,
+                )
 
     register_routers(app)
     return app

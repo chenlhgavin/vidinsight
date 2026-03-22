@@ -66,6 +66,9 @@ deploy: ## Rebuild and start all services
 	@echo "Step 2: Starting services..."
 	@docker compose up -d --wait $(SERVICE)
 	@echo ""
+	@echo "Step 3: Running database migrations..."
+	@docker compose exec -T backend uv run alembic upgrade head
+	@echo ""
 	@echo "✅ Deployment complete!"
 	@echo ""
 	@echo "Run 'make status' to check service health"

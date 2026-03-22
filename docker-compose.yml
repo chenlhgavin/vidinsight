@@ -6,9 +6,13 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    network_mode: host
+    ports:
+      - "${VIDINSIGHT_FRONTEND_PORT:-5173}:5173"
     environment:
-      - VITE_API_BASE_URL=http://127.0.0.1:8001
+      - VITE_API_BASE_URL=http://backend:8001
+    networks:
+      - default
+      - infra
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:5173"]
       interval: 5s
@@ -20,9 +24,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    network_mode: host
     env_file:
       - ./backend/.env
+    ports:
+      - "${VIDINSIGHT_BACKEND_PORT:-8001}:8001"
+    networks:
+      - default
+      - infra
     healthcheck:
       test:
         [
@@ -35,3 +43,8 @@ services:
       timeout: 3s
       retries: 12
       start_period: 5s
+
+networks:
+  infra:
+    external: true
+    name: infrastructure

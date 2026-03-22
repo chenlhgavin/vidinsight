@@ -11,6 +11,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.mysql import LONGTEXT
 
 metadata = MetaData()
 
@@ -93,7 +94,7 @@ video_metadata = Table(
     Column("video_author", Text, nullable=False),
     Column("video_duration_seconds", Integer, nullable=False, server_default="0"),
     Column("video_thumbnail_url", Text, nullable=False),
-    Column("transcript", Text, nullable=False),
+    Column("transcript", Text().with_variant(LONGTEXT, "mysql"), nullable=False),
     Column("language", String(32), nullable=False, server_default=""),
     Column("analysis_data", Text, nullable=True),
     Column("created_at", String(64), nullable=False),
