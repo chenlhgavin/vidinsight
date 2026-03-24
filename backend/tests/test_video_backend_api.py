@@ -41,6 +41,11 @@ def _stream_events(response: TestClient) -> list[dict]:
     return events
 
 
+def _set_cookie_header(response, cookie_name: str) -> str:
+    cookie_headers = response.headers.get_list("set-cookie")
+    return next(header for header in cookie_headers if header.startswith(f"{cookie_name}="))
+
+
 @pytest.fixture(autouse=True)
 def patch_video_pipeline(monkeypatch: pytest.MonkeyPatch):
     class TopicResultStub:
@@ -63,27 +68,8 @@ def patch_video_pipeline(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    settings = Settings(
-        anthropic_base_url="https://example.com",
-        anthropic_api_key="",
-        anthropic_auth_token="",
-        claude_sonnet_model="claude-test",
-        dashscope_api_key="",
-        dashscope_base_url="https://example.com",
-        qwen_model="qwen-test",
-        deepseek_api_key="",
-        deepseek_base_url="https://example.com",
-        deepseek_model="deepseek-test",
-        conversation_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'video.db').as_posix()}",
-        max_retries=1,
-        retry_delays=(0,),
-        max_context_messages=20,
-        cors_allow_origins="*",
-        cors_allow_credentials=True,
-    )
-
-    providers = TextProviderRegistry(
+def providers() -> TextProviderRegistry:
+    return TextProviderRegistry(
         {
             TextModelType.claude_sonnet: FakeProvider(
                 ModelDescriptor(
@@ -112,6 +98,39 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         }
     )
 
+
+@pytest.fixture
+def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, providers: TextProviderRegistry):
+    settings = Settings(
+        anthropic_base_url="https://example.com",
+        anthropic_api_key="",
+        anthropic_auth_token="",
+        claude_sonnet_model="claude-test",
+        dashscope_api_key="",
+        dashscope_base_url="https://example.com",
+        qwen_model="qwen-test",
+        deepseek_api_key="",
+        deepseek_base_url="https://example.com",
+        deepseek_model="deepseek-test",
+        conversation_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'video.db').as_posix()}",
+        max_retries=1,
+        retry_delays=(0,),
+        max_context_messages=20,
+        cors_allow_origins="*",
+        cors_allow_credentials=True,
+    )
+
+    app = _create_test_app(settings, monkeypatch, providers)
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def _create_test_app(
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    providers: TextProviderRegistry,
+):
     async def fake_fetch_video_info(video_id: str, _settings: Settings | None = None) -> dict:
         return {
             "video_id": video_id,
@@ -129,13 +148,10 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("app.services.video.fetch_transcript", fake_fetch_transcript)
     monkeypatch.setattr("app.services.video.format_transcript_for_llm", lambda _entries: "[00:00] line")
 
-    app = create_app(
+    return create_app(
         settings=settings,
         text_provider_registry=providers,
     )
-
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 def test_models_endpoint_comes_from_provider_registry(client: TestClient):
@@ -216,3 +232,135 @@ def test_video_notes_crud(client: TestClient):
     deleted = client.delete(f"/api/video/notes/{note_body['id']}")
     assert deleted.status_code == 200
     assert deleted.json() == {"ok": True}
+
+
+def test_login_cookies_are_not_secure_for_loopback_auto_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    providers: TextProviderRegistry,
+):
+    settings = Settings(
+        anthropic_base_url="https://example.com",
+        anthropic_api_key="",
+        anthropic_auth_token="",
+        claude_sonnet_model="claude-test",
+        dashscope_api_key="",
+        dashscope_base_url="https://example.com",
+        qwen_model="qwen-test",
+        deepseek_api_key="",
+        deepseek_base_url="https://example.com",
+        deepseek_model="deepseek-test",
+        conversation_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'auth-loopback.db').as_posix()}",
+        max_retries=1,
+        retry_delays=(0,),
+        max_context_messages=20,
+        cors_allow_origins="*",
+        cors_allow_credentials=True,
+        auth_enabled=True,
+        auth_jwt_secret="a" * 32,
+        auth_cookie_secure="auto",
+        auth_default_username="admin",
+        auth_default_password="vidinsight",
+    )
+    app = _create_test_app(settings, monkeypatch, providers)
+
+    with TestClient(app, base_url="http://localhost:8001") as auth_client:
+        response = auth_client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "vidinsight"},
+        )
+
+    assert response.status_code == 200
+    access_cookie = _set_cookie_header(response, "access_token")
+    csrf_cookie = _set_cookie_header(response, "csrf_token")
+    assert "Secure" not in access_cookie
+    assert "Secure" not in csrf_cookie
+    assert "SameSite=lax" in access_cookie
+    assert "SameSite=lax" in csrf_cookie
+
+
+def test_login_cookies_remain_secure_for_non_local_https_proxy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    providers: TextProviderRegistry,
+):
+    settings = Settings(
+        anthropic_base_url="https://example.com",
+        anthropic_api_key="",
+        anthropic_auth_token="",
+        claude_sonnet_model="claude-test",
+        dashscope_api_key="",
+        dashscope_base_url="https://example.com",
+        qwen_model="qwen-test",
+        deepseek_api_key="",
+        deepseek_base_url="https://example.com",
+        deepseek_model="deepseek-test",
+        conversation_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'auth-proxy.db').as_posix()}",
+        max_retries=1,
+        retry_delays=(0,),
+        max_context_messages=20,
+        cors_allow_origins="*",
+        cors_allow_credentials=True,
+        auth_enabled=True,
+        auth_jwt_secret="b" * 32,
+        auth_cookie_secure="auto",
+        auth_default_username="admin",
+        auth_default_password="vidinsight",
+    )
+    app = _create_test_app(settings, monkeypatch, providers)
+
+    with TestClient(app, base_url="http://vidinsight.local") as auth_client:
+        response = auth_client.post(
+            "/api/auth/login",
+            headers={"x-forwarded-proto": "https"},
+            json={"username": "admin", "password": "vidinsight"},
+        )
+
+    assert response.status_code == 200
+    access_cookie = _set_cookie_header(response, "access_token")
+    csrf_cookie = _set_cookie_header(response, "csrf_token")
+    assert "Secure" in access_cookie
+    assert "Secure" in csrf_cookie
+
+
+def test_authenticated_me_works_after_login_with_csrf_cookies(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    providers: TextProviderRegistry,
+):
+    settings = Settings(
+        anthropic_base_url="https://example.com",
+        anthropic_api_key="",
+        anthropic_auth_token="",
+        claude_sonnet_model="claude-test",
+        dashscope_api_key="",
+        dashscope_base_url="https://example.com",
+        qwen_model="qwen-test",
+        deepseek_api_key="",
+        deepseek_base_url="https://example.com",
+        deepseek_model="deepseek-test",
+        conversation_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'auth-me.db').as_posix()}",
+        max_retries=1,
+        retry_delays=(0,),
+        max_context_messages=20,
+        cors_allow_origins="*",
+        cors_allow_credentials=True,
+        auth_enabled=True,
+        auth_jwt_secret="c" * 32,
+        auth_cookie_secure="false",
+        auth_default_username="admin",
+        auth_default_password="vidinsight",
+    )
+    app = _create_test_app(settings, monkeypatch, providers)
+
+    with TestClient(app, base_url="http://localhost:8001") as auth_client:
+        login_response = auth_client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "vidinsight"},
+        )
+        assert login_response.status_code == 200
+
+        me_response = auth_client.get("/api/auth/me")
+
+    assert me_response.status_code == 200
+    assert me_response.json() == {"authenticated": True, "username": "admin"}

@@ -1,15 +1,33 @@
 const API_BASE = '/api';
+const unauthorizedListeners = new Set();
+
+export class UnauthorizedError extends Error {
+  constructor(message = 'Session expired') {
+    super(message);
+    this.name = 'UnauthorizedError';
+  }
+}
 
 function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
   return match ? match[1] : '';
 }
 
-function handleUnauthorized(res) {
-  if (res.status === 401) {
-    window.location.href = '/login';
-    throw new Error('Session expired');
+function notifyUnauthorized() {
+  for (const listener of unauthorizedListeners) {
+    listener();
   }
+}
+
+export function subscribeToUnauthorized(listener) {
+  unauthorizedListeners.add(listener);
+  return () => unauthorizedListeners.delete(listener);
+}
+
+async function throwUnauthorized(res) {
+  if (res.status !== 401) return;
+  notifyUnauthorized();
+  throw new UnauthorizedError(await readErrorMessage(res));
 }
 
 async function readErrorMessage(res) {
@@ -53,7 +71,7 @@ async function requestJson(path, options = {}) {
 
   const res = await fetch(`${API_BASE}${path}`, requestOptions);
   if (!res.ok) {
-    handleUnauthorized(res);
+    await throwUnauthorized(res);
     throw new Error(await readErrorMessage(res));
   }
   return res.json();
@@ -137,7 +155,7 @@ async function streamSSE(url, body, callbacks) {
   });
 
   if (!res.ok) {
-    handleUnauthorized(res);
+    await throwUnauthorized(res);
     throw new Error(await readErrorMessage(res));
   }
 
@@ -231,8 +249,8 @@ export async function changePassword(currentPassword, newPassword) {
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
   if (!res.ok) {
-    const msg = await readErrorMessage(res);
-    throw new Error(msg);
+    await throwUnauthorized(res);
+    throw new Error(await readErrorMessage(res));
   }
   return res.json();
 }

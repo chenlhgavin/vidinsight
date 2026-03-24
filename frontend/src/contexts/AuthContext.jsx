@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { subscribeToUnauthorized } from '../api';
 
 const AuthContext = createContext(null);
 
@@ -7,23 +8,58 @@ function getCsrfTokenFromCookie() {
   return match ? match[1] : '';
 }
 
+async function fetchAuthStatus() {
+  const res = await fetch('/api/auth/me', { cache: 'no-store' });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [csrfToken, setCsrfToken] = useState('');
   const [loading, setLoading] = useState(true);
+  const revalidatePromiseRef = useRef(null);
+
+  const syncAuthState = useCallback((data) => {
+    if (data?.authenticated) {
+      setUser({ username: data.username });
+      setCsrfToken(getCsrfTokenFromCookie());
+      return true;
+    }
+    setUser(null);
+    setCsrfToken('');
+    return false;
+  }, []);
+
+  const revalidateAuth = useCallback(async () => {
+    if (revalidatePromiseRef.current) {
+      return revalidatePromiseRef.current;
+    }
+
+    revalidatePromiseRef.current = fetchAuthStatus()
+      .then((data) => syncAuthState(data))
+      .catch(() => Boolean(user))
+      .finally(() => {
+        revalidatePromiseRef.current = null;
+      });
+
+    return revalidatePromiseRef.current;
+  }, [syncAuthState, user]);
 
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => (res.ok ? res.json() : null))
-      .then(data => {
-        if (data?.authenticated) {
-          setUser({ username: data.username });
-          setCsrfToken(getCsrfTokenFromCookie());
-        }
+    fetchAuthStatus()
+      .then((data) => {
+        syncAuthState(data);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [syncAuthState]);
+
+  useEffect(() => {
+    return subscribeToUnauthorized(() => {
+      void revalidateAuth();
+    });
+  }, [revalidateAuth]);
 
   const login = useCallback(async (username, password) => {
     const res = await fetch('/api/auth/login', {
@@ -50,7 +86,7 @@ export function AuthProvider({ children }) {
   }, [csrfToken]);
 
   return (
-    <AuthContext.Provider value={{ user, csrfToken, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, csrfToken, loading, login, logout, revalidateAuth }}>
       {children}
     </AuthContext.Provider>
   );

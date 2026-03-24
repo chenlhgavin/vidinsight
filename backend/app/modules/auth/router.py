@@ -31,12 +31,22 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().strip("[]").lower()
+    return normalized in {"localhost", "127.0.0.1", "::1"}
+
+
 def _resolve_cookie_secure(request: Request) -> bool:
     setting = request.app.state.settings.auth_cookie_secure
     if setting in {"true", "1", "yes"}:
         return True
     if setting in {"false", "0", "no"}:
         return False
+
+    host = request.url.hostname or request.headers.get("host", "")
+    if _is_loopback_host(host):
+        return False
+
     # auto: detect from request scheme or X-Forwarded-Proto
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     return proto == "https"
