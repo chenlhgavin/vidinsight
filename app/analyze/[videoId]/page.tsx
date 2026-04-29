@@ -247,6 +247,22 @@ function AnalyzePageInner() {
     [router, videoId],
   );
 
+  const checkGenerationLimit = useCallback(async (): Promise<boolean> => {
+    if (user) return true;
+    try {
+      const r = await fetch('/api/check-limit');
+      const data = (await r.json()) as { usage?: { totalRemaining?: number | null } } | null;
+      const remaining = data?.usage?.totalRemaining;
+      if (typeof remaining === 'number' && remaining <= 0) {
+        redirectToAuthForLimit();
+        return false;
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  }, [redirectToAuthForLimit, user]);
+
   const dispatch = useCallback((cmd: PlaybackCommand) => {
     setCommand({ ...cmd });
   }, []);
@@ -348,6 +364,8 @@ function AnalyzePageInner() {
           await loadCached(cache.video.youtube_id);
           return;
         }
+
+        if (!(await checkGenerationLimit())) return;
 
         setState('ANALYZING_NEW');
         await analyzeFresh();
@@ -630,25 +648,9 @@ function AnalyzePageInner() {
     };
 
     void run();
-  }, [videoId, redirectToAuthForLimit]);
+  }, [videoId, redirectToAuthForLimit, checkGenerationLimit]);
 
   const themes = useMemo(() => extractThemes(candidates), [candidates]);
-
-  const checkGenerationLimit = useCallback(async (): Promise<boolean> => {
-    if (user) return true;
-    try {
-      const r = await fetch('/api/check-limit');
-      const data = (await r.json()) as { usage?: { totalRemaining?: number | null } } | null;
-      const remaining = data?.usage?.totalRemaining;
-      if (typeof remaining === 'number' && remaining <= 0) {
-        redirectToAuthForLimit();
-        return false;
-      }
-      return true;
-    } catch {
-      return true;
-    }
-  }, [redirectToAuthForLimit, user]);
 
   const handleSelectTheme = useCallback(
     async (theme: string | null) => {
