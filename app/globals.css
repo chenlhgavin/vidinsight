@@ -1,0 +1,172 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* ---------------------------------------------------------------------------
+ * Theme tokens — Tailwind v4 reads `--color-*` from `@theme` to generate
+ * utilities (bg-foo, text-foo, border-foo, ring-foo) AND to derive opacity
+ * variants (bg-foo/40) via color-mix. Values are declared as parseable HSL
+ * literals so color-mix works. We use `@theme` (NOT `@theme inline`) so the
+ * generated utilities resolve via `var(--color-*)`, allowing the `.light`
+ * selector below to override tokens at runtime and swap palettes.
+ * --------------------------------------------------------------------------- */
+
+@theme {
+  --color-background: hsl(240 6% 5%);
+  --color-foreground: hsl(48 25% 95%);
+
+  --color-surface-1: hsl(240 5% 7%);
+  --color-surface-2: hsl(240 5% 9%);
+  --color-surface-3: hsl(240 5% 12%);
+  --color-surface-4: hsl(240 5% 16%);
+
+  --color-card: hsl(240 5% 9%);
+  --color-card-foreground: hsl(48 25% 95%);
+  --color-popover: hsl(240 5% 12%);
+  --color-popover-foreground: hsl(48 25% 95%);
+
+  --color-primary: hsl(75 100% 67%);
+  --color-primary-foreground: hsl(240 10% 4%);
+  --color-secondary: hsl(240 5% 14%);
+  --color-secondary-foreground: hsl(48 20% 92%);
+  --color-muted: hsl(240 4% 13%);
+  --color-muted-foreground: hsl(240 5% 63%);
+  --color-accent: hsl(240 5% 16%);
+  --color-accent-foreground: hsl(48 25% 95%);
+
+  --color-lime: hsl(75 100% 67%);
+  --color-orange: hsl(22 100% 55%);
+  --color-orange-foreground: hsl(0 0% 100%);
+
+  --color-destructive: hsl(0 72% 55%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  --color-border: hsl(240 5% 16%);
+  --color-input: hsl(240 5% 14%);
+  --color-ring: hsl(75 100% 67%);
+
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 16px);
+}
+
+/* ---------------------------------------------------------------------------
+ * Light-mode overrides. Setting --color-* on the `.light` selector replaces
+ * the value resolved by Tailwind at runtime, so `bg-surface-2` and friends
+ * automatically swap palettes when `<html class="light">`.
+ * --------------------------------------------------------------------------- */
+
+.light {
+  --color-background: hsl(40 33% 98%);
+  --color-foreground: hsl(240 10% 6%);
+
+  --color-surface-1: hsl(40 33% 98%);
+  --color-surface-2: hsl(0 0% 100%);
+  --color-surface-3: hsl(40 25% 96%);
+  --color-surface-4: hsl(40 22% 93%);
+
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(240 10% 6%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(240 10% 6%);
+
+  --color-primary: hsl(240 10% 8%);
+  --color-primary-foreground: hsl(48 33% 97%);
+  --color-secondary: hsl(40 22% 93%);
+  --color-secondary-foreground: hsl(240 10% 6%);
+  --color-muted: hsl(40 22% 93%);
+  --color-muted-foreground: hsl(240 5% 40%);
+  --color-accent: hsl(40 22% 93%);
+  --color-accent-foreground: hsl(240 10% 6%);
+
+  --color-lime: hsl(75 70% 45%);
+  --color-orange: hsl(22 95% 50%);
+
+  --color-destructive: hsl(0 72% 50%);
+  --color-border: hsl(40 18% 88%);
+  --color-input: hsl(40 18% 88%);
+  --color-ring: hsl(240 10% 8%);
+
+  color-scheme: light;
+}
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+    color-scheme: dark;
+
+    /* Raw HSL components, exposed for arbitrary-value patterns like
+       shadow-[...hsl(var(--accent-lime)/0.7)...] that need to inject alpha
+       inside an hsl() call. Kept in sync with the dark `--color-*` tokens. */
+    --accent-lime: 75 100% 67%;
+    --accent-orange: 22 100% 55%;
+    --surface-1: 240 5% 7%;
+    --surface-2: 240 5% 9%;
+    --surface-3: 240 5% 12%;
+    --surface-4: 240 5% 16%;
+    --background: 240 6% 5%;
+    --foreground: 48 25% 95%;
+    --border: 240 5% 16%;
+    --ring: 75 100% 67%;
+    --muted-foreground: 240 5% 63%;
+  }
+
+  .light {
+    --accent-lime: 75 70% 45%;
+    --accent-orange: 22 95% 50%;
+    --surface-1: 40 33% 98%;
+    --surface-2: 0 0% 100%;
+    --surface-3: 40 25% 96%;
+    --surface-4: 40 22% 93%;
+    --background: 40 33% 98%;
+    --foreground: 240 10% 6%;
+    --border: 40 18% 88%;
+    --ring: 240 10% 8%;
+    --muted-foreground: 240 5% 40%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply scroll-smooth;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'ss01', 'cv11';
+  }
+  ::selection {
+    background: hsl(75 100% 67% / 0.35);
+    color: var(--color-foreground);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-instrument-serif), 'Instrument Serif', Georgia, serif;
+    font-feature-settings: 'liga', 'dlig';
+  }
+  .surface-inner {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .vignette {
+    background:
+      radial-gradient(ellipse 120% 80% at 50% 0%, var(--color-surface-3), var(--color-surface-2) 70%);
+  }
+  .bg-cinematic {
+    background:
+      radial-gradient(ellipse 100% 60% at 50% -10%, hsl(75 100% 67% / 0.07), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 90% 110%, hsl(22 100% 55% / 0.05), transparent 60%),
+      var(--color-background);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
