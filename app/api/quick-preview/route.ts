@@ -5,7 +5,6 @@ import { gateGuestForGeneration, finalizeGuestResponse } from '@/lib/guest-gate'
 import type { VideoInfo } from '@/lib/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 30;
 
 export const POST = withSecurity(SECURITY_PRESETS.AI_GENERATION, async (request, ctx) => {
   const gate = await gateGuestForGeneration(request, ctx, { isPrimaryAnalysis: false });
@@ -45,7 +44,21 @@ export const POST = withSecurity(SECURITY_PRESETS.AI_GENERATION, async (request,
     });
     return finalizeGuestResponse(NextResponse.json(result), gate.guestState, { consumed: false });
   } catch (err) {
-    console.error('[quick-preview]', err);
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    console.warn('[quick-preview] falling back:', (err as Error).message);
+    const preview = {
+      title: 'Quick preview',
+      summary:
+        'Analyzing this video to surface the main ideas, memorable moments, and transcript-grounded study material.',
+      glance: [
+        'Standout moments are being mapped',
+        'Key takeaways are being prepared',
+        'Follow-up questions will be suggested',
+      ],
+    };
+    return finalizeGuestResponse(
+      NextResponse.json({ preview }),
+      gate.guestState,
+      { consumed: false },
+    );
   }
 });

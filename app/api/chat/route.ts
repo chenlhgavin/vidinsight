@@ -7,7 +7,27 @@ import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
 import { gateGuestForGeneration, finalizeGuestResponse } from '@/lib/guest-gate';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+
+function chatErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const lower = message.toLowerCase();
+  if (lower.includes('rate limit') || lower.includes('429')) {
+    return 'The AI service is currently at capacity. Please wait a moment and try again.';
+  }
+  if (lower.includes('auth') || lower.includes('401') || lower.includes('api key')) {
+    return "There's a configuration issue with the AI service. Please try again later.";
+  }
+  if (lower.includes('schema') || lower.includes('json') || lower.includes('format')) {
+    return 'I had trouble formatting my response. Please try rephrasing your question.';
+  }
+  if (lower.includes('timeout') || lower.includes('timed out')) {
+    return 'The request took too long. Please try again with a shorter question.';
+  }
+  if (lower.includes('empty') || lower.includes('no response')) {
+    return "I couldn't generate a response. Please try rephrasing your question.";
+  }
+  return "I apologize, but I'm having trouble processing your request right now. Please try again in a moment.";
+}
 
 function findClosestSegmentIndex(transcript: TranscriptSegment[], seconds: number): number {
   if (!transcript.length || !Number.isFinite(seconds)) return -1;
@@ -82,7 +102,12 @@ export const POST = withSecurity(SECURITY_PRESETS.AI_GENERATION, async (request,
     });
   } catch (err) {
     console.error('[chat]', err);
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    const fallbackAnswer = chatErrorMessage(err);
+    return finalizeGuestResponse(
+      NextResponse.json({ answer: fallbackAnswer, citations: [] }),
+      gate.guestState,
+      { consumed: false },
+    );
   }
 
   const enriched: Citation[] = result.citations.map((c) => {

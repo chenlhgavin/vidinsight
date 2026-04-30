@@ -23,7 +23,8 @@ npm run dev
 Required env vars:
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-- `MINIMAX_API_KEY` (default model `MiniMax-M2.7`)
+- `DEEPSEEK_API_KEY` (default model `deepseek-v4-flash`)
+- `MINIMAX_API_KEY` (optional fallback provider)
 - `SUPADATA_API_KEY` (transcript fallback)
 - `CRON_SECRET` (Vercel Cron auth for `/api/cron/cleanup-rate-limits`)
 

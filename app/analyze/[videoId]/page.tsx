@@ -43,9 +43,6 @@ import type {
 type PageState = 'IDLE' | 'ANALYZING_NEW' | 'LOADING_CACHED' | 'READY' | 'ERROR';
 type Stage = 'fetching' | 'understanding' | 'generating' | 'processing';
 
-const AI_TIMEOUT_MS = 65_000;
-const TOPICS_TIMEOUT_MS = 190_000;
-
 interface CacheCheck {
   cached: boolean;
   video: { id: string; youtube_id: string; title?: string | null; slug?: string | null } | null;
@@ -415,7 +412,7 @@ function AnalyzePageInner() {
         void backgroundOperation('regenerate-cached-topics', async () => {
           setHighlightsLoading(true);
           try {
-            const topicsCtl = mgr.createController('cached-topics', TOPICS_TIMEOUT_MS);
+            const topicsCtl = mgr.createController('cached-topics');
             const generated = requireTopics(
               await postJson<TopicsResult>(
                 '/api/video-analysis',
@@ -457,7 +454,7 @@ function AnalyzePageInner() {
 
       if (!normalizeQuickPreview(analysis.quick_preview) && cachedTranscript.length) {
         void backgroundOperation('generate-cached-preview', async () => {
-          const ctl = mgr.createController('cached-preview', 30_000);
+          const ctl = mgr.createController('cached-preview');
           const data = await postJson<QuickPreviewResult>(
             '/api/quick-preview',
             { transcript: cachedTranscript, videoInfo: cachedVideoInfo },
@@ -477,8 +474,8 @@ function AnalyzePageInner() {
     };
 
     const analyzeFresh = async () => {
-      const transcriptCtl = mgr.createController('transcript', 30_000);
-      const infoCtl = mgr.createController('video-info', 10_000);
+      const transcriptCtl = mgr.createController('transcript');
+      const infoCtl = mgr.createController('video-info');
 
       const [tResp, vResp] = await Promise.all([
         csrfFetch('/api/transcript', {
@@ -544,7 +541,7 @@ function AnalyzePageInner() {
           return null;
         });
 
-      const previewCtl = mgr.createController('quick-preview', 30_000);
+      const previewCtl = mgr.createController('quick-preview');
       void backgroundOperation('quick-preview', async () => {
         const data = await postJson<QuickPreviewResult>(
           '/api/quick-preview',
@@ -570,7 +567,7 @@ function AnalyzePageInner() {
         return preview;
       });
 
-      const summaryCtl = mgr.createController('summary', AI_TIMEOUT_MS);
+      const summaryCtl = mgr.createController('summary');
       setSummaryLoading(true);
       void backgroundOperation(
         'generate-summary',
@@ -595,7 +592,7 @@ function AnalyzePageInner() {
 
       setStage('generating');
       setHighlightsLoading(true);
-      const topicsCtl = mgr.createController('topics', TOPICS_TIMEOUT_MS);
+      const topicsCtl = mgr.createController('topics');
       let generatedTopics: TopicsResult;
       try {
         generatedTopics = requireTopics(
@@ -630,7 +627,7 @@ function AnalyzePageInner() {
       setState('READY');
 
       void backgroundOperation('generate-questions', async () => {
-        const questionsCtl = mgr.createController('questions', AI_TIMEOUT_MS);
+        const questionsCtl = mgr.createController('questions');
         const data = await postJson<SuggestedQuestionsResult>(
           '/api/suggested-questions',
           { ...baseBody, topics: ts, count: 5 },

@@ -22,7 +22,7 @@ export function buildQuestionsPrompt({
   const ex = exclude?.length ? `\nAvoid repeating: ${exclude.join(' | ')}` : '';
   return `Generate ${count} thoughtful, specific questions a curious learner would ask after watching this video. Each question should be answerable from the transcript.${topicList}${ex}
 
-Return ONLY: { "questions": ["...", "..."] }
+Return ONLY a valid JSON object: { "questions": ["...", "..."] }
 
 ${buildContextHeader(videoInfo, language)}
 

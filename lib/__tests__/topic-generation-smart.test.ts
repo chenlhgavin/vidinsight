@@ -37,33 +37,39 @@ function transcript(durationSeconds: number): TranscriptSegment[] {
   ];
 }
 
-test('getTopicGenerationModel uses AI_DEFAULT_MODEL for deprecated fast mode', async () => {
+test('getTopicGenerationModel uses fast MiniMax model for deprecated fast mode', async () => {
   await withEnv(
     {
+      AI_PROVIDER: 'minimax',
       AI_DEFAULT_MODEL: 'default-model',
+      AI_FAST_MODEL: 'fast-model',
+      AI_PRO_MODEL: 'pro-model',
     },
     () => {
       assert.equal(
         getTopicGenerationModel({ mode: 'fast', transcript: transcript(3_600) }),
-        'default-model',
+        'MiniMax-M2.7-highspeed',
       );
     },
   );
 });
 
-test('getTopicGenerationModel uses AI_DEFAULT_MODEL for long and short smart videos', async () => {
+test('getTopicGenerationModel uses fast MiniMax model for long and short smart videos', async () => {
   await withEnv(
     {
+      AI_PROVIDER: 'minimax',
       AI_DEFAULT_MODEL: 'default-model',
+      AI_FAST_MODEL: 'fast-model',
+      AI_PRO_MODEL: 'pro-model',
     },
     () => {
       assert.equal(
         getTopicGenerationModel({ mode: 'smart', transcript: transcript(1_801) }),
-        'default-model',
+        'MiniMax-M2.7-highspeed',
       );
       assert.equal(
         getTopicGenerationModel({ mode: 'smart', transcript: transcript(1_800) }),
-        'default-model',
+        'MiniMax-M2.7-highspeed',
       );
     },
   );

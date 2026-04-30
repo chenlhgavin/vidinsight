@@ -6,13 +6,13 @@
   "functions": {
     "app/api/generate-topics/route.ts": { "maxDuration": 180 },
     "app/api/video-analysis/route.ts": { "maxDuration": 180 },
-    "app/api/generate-summary/route.ts": { "maxDuration": 60 },
-    "app/api/quick-preview/route.ts": { "maxDuration": 30 },
+    "app/api/generate-summary/route.ts": { "maxDuration": 180 },
+    "app/api/quick-preview/route.ts": { "maxDuration": 60 },
     "app/api/top-quotes/route.ts": { "maxDuration": 60 },
     "app/api/suggested-questions/route.ts": { "maxDuration": 60 },
     "app/api/chat/route.ts": { "maxDuration": 60 },
     "app/api/transcript/route.ts": { "maxDuration": 30 },
-    "app/api/translate/route.ts": { "maxDuration": 30 }
+    "app/api/translate/route.ts": { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/cron/cleanup-rate-limits", "schedule": "0 3 * * *" }

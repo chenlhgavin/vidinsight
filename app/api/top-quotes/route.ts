@@ -4,7 +4,6 @@ import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
 import { gateGuestForGeneration, finalizeGuestResponse } from '@/lib/guest-gate';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
 
 export const POST = withSecurity(SECURITY_PRESETS.AI_GENERATION, async (request, ctx) => {
   const gate = await gateGuestForGeneration(request, ctx, { isPrimaryAnalysis: false });
@@ -22,7 +21,11 @@ export const POST = withSecurity(SECURITY_PRESETS.AI_GENERATION, async (request,
     });
     return finalizeGuestResponse(NextResponse.json(result), gate.guestState, { consumed: false });
   } catch (err) {
-    console.error('[top-quotes]', err);
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    console.warn('[top-quotes] falling back:', (err as Error).message);
+    return finalizeGuestResponse(
+      NextResponse.json({ quotes: [] }),
+      gate.guestState,
+      { consumed: false },
+    );
   }
 });

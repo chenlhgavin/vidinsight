@@ -15,7 +15,7 @@ export function buildQuotesPrompt({
 - quote: verbatim text from the transcript (do not paraphrase)
 - timestamp: M:SS
 
-Order by impact (most striking first). Return ONLY: { "quotes": [...] }
+Order by impact (most striking first). Return ONLY a valid JSON object: { "quotes": [...] }
 
 ${buildContextHeader(videoInfo, language)}
 

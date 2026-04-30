@@ -1,6 +1,12 @@
 import type { z } from 'zod';
 import { generateAIResult, generateStructuredContent } from '@/lib/ai-client';
 import {
+  availableProviders,
+  getEffectiveProviderKey,
+  getProviderBehavior,
+  getProviderModelDefaults,
+} from '@/lib/ai-providers';
+import {
   summaryTakeawaysSchema,
   topQuotesSchema,
   suggestedQuestionsSchema,
@@ -16,8 +22,16 @@ import { buildChatSystemPrompt, buildChatUserPrompt } from '@/lib/prompts/chat';
 import { buildTranscriptIndex, findTextInTranscript } from '@/lib/quote-matcher';
 import { formatTimestamp, parseTimestampRange } from '@/lib/timestamp-utils';
 import { topicQuoteKey } from '@/lib/topic-utils';
+import { safeJsonParse } from '@/lib/json-utils';
+import {
+  buildMinimalTakeawaysFallback,
+  normalizeTakeawaysPayload,
+  recoverPartialTakeaways,
+  type RecoveredTakeaway,
+} from '@/lib/summary-recovery';
 import type {
   ChatMessage,
+  SummaryTakeaway,
   Topic,
   TopicCandidate,
   TopicGenerationMode,
@@ -27,20 +41,18 @@ import type {
   VideoInfo,
 } from '@/lib/types';
 
-const AI_TIMEOUT = 60_000;
-const PREVIEW_TIMEOUT = 30_000;
-
-const TOPIC_TOTAL_BUDGET_MS = 170_000;
-const TOPIC_SINGLE_PASS_TIMEOUT_MS = 90_000;
-const MIN_PROVIDER_TIMEOUT_MS = 8_000;
 const DEFAULT_CHUNK_DURATION_SECONDS = 5 * 60;
 const DEFAULT_CHUNK_OVERLAP_SECONDS = 45;
+const CHUNK_MAX_CANDIDATES = 2;
+const SHORT_VIDEO_THRESHOLD_SECONDS = 30 * 60;
+const REDUCE_BOUNDARY_RATIO = 0.6;
 const MAX_TOPICS = 5;
 const MAX_CANDIDATES = 20;
+const SUMMARY_MAX_OUTPUT_TOKENS = 4096;
 
 type QuoteTopicsPayload = z.infer<typeof quoteTopicsPayloadSchema>;
 
-type TopicGenerationStrategy = 'single-pass' | 'local-fallback';
+type TopicGenerationStrategy = 'single-pass' | 'chunked-reduce' | 'local-fallback';
 
 interface CommonArgs {
   transcript: TranscriptSegment[];
@@ -84,17 +96,45 @@ function quoteKey(topic: QuoteTopic): string {
   );
 }
 
+function getChunkConcurrency(): number {
+  const raw = Number(process.env.MINIMAX_CHUNK_CONCURRENCY);
+  if (Number.isFinite(raw) && raw >= 1) return Math.floor(raw);
+  return 3;
+}
+
+async function mapWithConcurrency<T, U>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<U>,
+): Promise<U[]> {
+  if (items.length === 0) return [];
+  const effective = Math.max(1, Math.min(limit, items.length));
+  const results = new Array<U>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: effective }, async () => {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= items.length) return;
+      results[idx] = await fn(items[idx], idx);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 function videoDurationSeconds(transcript: TranscriptSegment[]): number {
   const last = transcript[transcript.length - 1];
   return last ? last.start + last.duration : 0;
 }
 
-function topicModelDefault() {
-  return process.env.AI_DEFAULT_MODEL || 'MiniMax-M2.7';
+function isShortVideo(transcript: TranscriptSegment[]): boolean {
+  return videoDurationSeconds(transcript) <= SHORT_VIDEO_THRESHOLD_SECONDS;
 }
 
-function canUseTopicProvider(): boolean {
-  return Boolean(process.env.MINIMAX_API_KEY);
+function selectTopicModel(transcript: TranscriptSegment[]): string {
+  const defaults = getProviderModelDefaults();
+  void transcript;
+  return defaults.fastModel;
 }
 
 export function getTopicGenerationModel({
@@ -105,22 +145,11 @@ export function getTopicGenerationModel({
   transcript: TranscriptSegment[];
 }): string {
   void mode;
-  void transcript;
-  return topicModelDefault();
+  return selectTopicModel(transcript);
 }
 
-function remainingBudgetMs(startedAt: number): number {
-  return Math.max(0, TOPIC_TOTAL_BUDGET_MS - (Date.now() - startedAt));
-}
-
-function providerTimeout(startedAt: number, desiredMs: number, reserveMs = 10_000): number | null {
-  const available = remainingBudgetMs(startedAt) - reserveMs;
-  if (available < MIN_PROVIDER_TIMEOUT_MS) return null;
-  return Math.min(desiredMs, available);
-}
-
-function shouldContinue(startedAt: number, signal?: AbortSignal, requiredMs = MIN_PROVIDER_TIMEOUT_MS) {
-  return !signal?.aborted && remainingBudgetMs(startedAt) >= requiredMs;
+function canUseTopicProvider(): boolean {
+  return availableProviders().length > 0;
 }
 
 function formatTranscriptWithTimestamps(segments: TranscriptSegment[]): string {
@@ -252,11 +281,9 @@ async function runSinglePassTopicGeneration(args: {
   videoInfo?: VideoInfo;
   language?: string;
   model: string;
-  startedAt: number;
   signal?: AbortSignal;
 }): Promise<{ topics: QuoteTopic[]; modelUsed: string }> {
-  const timeoutMs = providerTimeout(args.startedAt, TOPIC_SINGLE_PASS_TIMEOUT_MS);
-  if (!timeoutMs) return { topics: [], modelUsed: args.model };
+  if (args.signal?.aborted) return { topics: [], modelUsed: args.model };
 
   try {
     const result = await generateAIResult<QuoteTopicsPayload>(
@@ -269,8 +296,6 @@ async function runSinglePassTopicGeneration(args: {
       {
         model: args.model,
         zodSchema: quoteTopicsPayloadSchema,
-        timeoutMs,
-        maxRetries: 0,
         signal: args.signal,
         temperature: 0.55,
         maxOutputTokens: 4096,
@@ -284,6 +309,227 @@ async function runSinglePassTopicGeneration(args: {
     console.error('[generateTopics] single-pass generation failed:', error);
     return { topics: [], modelUsed: args.model };
   }
+}
+
+function buildChunkPrompt(args: {
+  chunk: TranscriptChunk;
+  videoInfo?: VideoInfo;
+  language?: string;
+  maxCandidates: number;
+}): string {
+  const transcript = formatTranscriptWithTimestamps(args.chunk.segments);
+  const start = formatTimestamp(args.chunk.start);
+  const end = formatTimestamp(args.chunk.end);
+  return `You are scanning one segment of a longer video transcript (window ${start}-${end}) to surface the most valuable highlight reel candidates from this window only.
+
+Context:
+${formatVideoInfo(args.videoInfo, args.language)}
+
+Goal:
+Pick up to ${args.maxCandidates} distinct highlight candidates from this window. Skip the window if nothing is genuinely strong.
+
+Rules:
+- Output must be valid JSON only. Do not include Markdown fences, prose, or explanations.
+- If there are no strong candidates, return { "topics": [] }.
+- Each candidate must be one contiguous quote, copied verbatim from this window.
+- Timestamp must be an absolute bracketed range like [${start}-${end}] within the window.
+- Titles are concise statements, ≤10 words.
+- Prefer contrarian insights, vivid stories, frameworks, examples, or data-backed arguments.
+
+Return only this JSON object:
+{ "topics": [{ "title": "string", "quote": { "timestamp": "[MM:SS-MM:SS]", "text": "exact transcript quote" } }] }
+
+Window transcript:
+${transcript}`;
+}
+
+function buildReducePrompt(args: {
+  candidates: QuoteTopic[];
+  videoInfo?: VideoInfo;
+  language?: string;
+  target: number;
+  segmentLabel: string;
+}): string {
+  const candidatesJson = JSON.stringify(args.candidates, null, 2);
+  return `You are curating highlight reels from candidate moments already extracted from a longer video.
+
+Context:
+${formatVideoInfo(args.videoInfo, args.language)}
+
+Goal:
+From the candidates below (${args.segmentLabel} of the video), select the ${args.target} strongest highlights. Return fewer if not enough are genuinely strong.
+
+Rules:
+- Output must be valid JSON only. Do not include Markdown fences, prose, or explanations.
+- If no candidates are strong enough, return { "topics": [] }.
+- Use only candidates from the list. Do NOT invent new quotes.
+- Keep each quote text and timestamp verbatim (you may shorten the title).
+- Titles ≤ 10 words.
+
+Return only this JSON object:
+{ "topics": [{ "title": "string", "quote": { "timestamp": "[MM:SS-MM:SS]", "text": "exact quote" } }] }
+
+Candidates:
+${candidatesJson}`;
+}
+
+async function runChunkedCandidateGeneration(args: {
+  chunks: TranscriptChunk[];
+  videoInfo?: VideoInfo;
+  language?: string;
+  model: string;
+  signal?: AbortSignal;
+}): Promise<{ candidates: QuoteTopic[]; modelUsed: string }> {
+  if (args.signal?.aborted || !args.chunks.length) {
+    return { candidates: [], modelUsed: args.model };
+  }
+
+  const results = await mapWithConcurrency(args.chunks, getChunkConcurrency(), async (chunk) => {
+    try {
+      const result = await generateAIResult<QuoteTopicsPayload>(
+        buildChunkPrompt({
+          chunk,
+          videoInfo: args.videoInfo,
+          language: args.language,
+          maxCandidates: CHUNK_MAX_CANDIDATES,
+        }),
+        {
+          model: args.model,
+          zodSchema: quoteTopicsPayloadSchema,
+          signal: args.signal,
+          temperature: 0.6,
+          maxOutputTokens: 2048,
+        },
+      );
+      return {
+        topics: (result.parsed?.topics ?? []).slice(0, CHUNK_MAX_CANDIDATES),
+        modelUsed: result.modelUsed,
+      };
+    } catch (error) {
+      console.warn(`[generateTopics] chunk ${chunk.id} failed:`, error);
+      return { topics: [] as QuoteTopic[], modelUsed: args.model };
+    }
+  });
+
+  const candidates: QuoteTopic[] = [];
+  let modelUsed = args.model;
+  for (const r of results) {
+    candidates.push(...r.topics);
+    if (r.modelUsed) modelUsed = r.modelUsed;
+  }
+  return { candidates: dedupeQuoteTopics(candidates), modelUsed };
+}
+
+function dedupeQuoteTopics(topics: QuoteTopic[]): QuoteTopic[] {
+  const seen = new Set<string>();
+  const out: QuoteTopic[] = [];
+  for (const topic of topics) {
+    const key = quoteKey(topic);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(topic);
+  }
+  return out;
+}
+
+function timestampStartSeconds(topic: QuoteTopic): number {
+  const range = parseTimestampRange(topic.quote.timestamp);
+  return range ? range.start : 0;
+}
+
+async function reduceCandidateSubset(args: {
+  candidates: QuoteTopic[];
+  videoInfo?: VideoInfo;
+  language?: string;
+  model: string;
+  target: number;
+  segmentLabel: string;
+  signal?: AbortSignal;
+}): Promise<QuoteTopic[]> {
+  if (!args.candidates.length || args.target <= 0 || args.signal?.aborted) return [];
+  if (args.candidates.length <= args.target) return args.candidates;
+
+  try {
+    const result = await generateAIResult<QuoteTopicsPayload>(
+      buildReducePrompt({
+        candidates: args.candidates,
+        videoInfo: args.videoInfo,
+        language: args.language,
+        target: args.target,
+        segmentLabel: args.segmentLabel,
+      }),
+      {
+        model: args.model,
+        zodSchema: quoteTopicsPayloadSchema,
+        signal: args.signal,
+        temperature: 0.4,
+        maxOutputTokens: 2048,
+      },
+    );
+    return (result.parsed?.topics ?? []).slice(0, args.target);
+  } catch (error) {
+    console.warn(`[generateTopics] reduce ${args.segmentLabel} failed:`, error);
+    // Local fallback: pick the first N candidates as-is
+    return args.candidates.slice(0, args.target);
+  }
+}
+
+async function runChunkedReducePipeline(args: {
+  transcript: TranscriptSegment[];
+  videoInfo?: VideoInfo;
+  language?: string;
+  model: string;
+  signal?: AbortSignal;
+}): Promise<{ topics: QuoteTopic[]; candidates: QuoteTopic[]; modelUsed: string }> {
+  const chunks = chunkTranscriptForTopics(args.transcript);
+  if (!chunks.length) return { topics: [], candidates: [], modelUsed: args.model };
+
+  const fastModel = getProviderModelDefaults().fastModel;
+  console.log(`[generateTopics] chunked pipeline (${chunks.length} chunks, model=${fastModel})`);
+
+  const { candidates, modelUsed } = await runChunkedCandidateGeneration({
+    chunks,
+    videoInfo: args.videoInfo,
+    language: args.language,
+    model: fastModel,
+    signal: args.signal,
+  });
+
+  if (!candidates.length || args.signal?.aborted) {
+    return { topics: [], candidates: [], modelUsed };
+  }
+
+  const totalDuration = videoDurationSeconds(args.transcript);
+  const boundary = totalDuration * REDUCE_BOUNDARY_RATIO;
+  const firstHalf = candidates.filter((c) => timestampStartSeconds(c) < boundary);
+  const secondHalf = candidates.filter((c) => timestampStartSeconds(c) >= boundary);
+
+  const firstTarget = Math.min(3, MAX_TOPICS);
+  const secondTarget = Math.min(MAX_TOPICS - firstTarget, Math.max(0, MAX_TOPICS - firstTarget));
+
+  const [firstReduced, secondReduced] = await Promise.all([
+    reduceCandidateSubset({
+      candidates: firstHalf,
+      videoInfo: args.videoInfo,
+      language: args.language,
+      model: fastModel,
+      target: firstTarget,
+      segmentLabel: 'earlier portion',
+      signal: args.signal,
+    }),
+    reduceCandidateSubset({
+      candidates: secondHalf,
+      videoInfo: args.videoInfo,
+      language: args.language,
+      model: fastModel,
+      target: secondTarget,
+      segmentLabel: 'later portion',
+      signal: args.signal,
+    }),
+  ]);
+
+  const reduced = dedupeQuoteTopics([...firstReduced, ...secondReduced]).slice(0, MAX_TOPICS);
+  return { topics: reduced, candidates, modelUsed };
 }
 
 
@@ -535,36 +781,52 @@ function buildTopicCandidates(
 }
 
 export async function generateTopics(args: GenerateTopicsArgs): Promise<GenerateTopicsResult> {
-  const startedAt = Date.now();
   const mode: TopicGenerationMode = 'smart';
   const includeCandidatePool = args.includeCandidatePool ?? true;
   const excludedKeys = new Set(args.excludeTopicKeys ?? []);
-  const smartModel = getTopicGenerationModel({ mode: 'smart', transcript: args.transcript });
+  const model = selectTopicModel(args.transcript);
 
   let quoteTopics: QuoteTopic[] = [];
-  const candidateTopics: QuoteTopic[] = [];
-  let modelUsed = smartModel;
+  let candidateTopics: QuoteTopic[] = [];
+  let modelUsed = model;
   let generationStrategy: TopicGenerationStrategy = 'local-fallback';
 
   const canUseAI = canUseTopicProvider();
+  const providerKey = getEffectiveProviderKey();
+  const behavior = getProviderBehavior(providerKey);
+  const useSinglePass =
+    isShortVideo(args.transcript) || behavior.forceFullTranscriptTopicGeneration;
 
-  if (canUseAI && mode === 'smart' && shouldContinue(startedAt, args.signal)) {
-    const singlePass = await runSinglePassTopicGeneration({
-      transcript: args.transcript,
-      videoInfo: args.videoInfo,
-      language: args.language,
-      model: smartModel,
-      startedAt,
-      signal: args.signal,
-    });
-    quoteTopics = filterExcluded(singlePass.topics, excludedKeys).slice(0, MAX_TOPICS);
-    modelUsed = singlePass.modelUsed || smartModel;
-    if (quoteTopics.length) generationStrategy = 'single-pass';
+  if (canUseAI && !args.signal?.aborted) {
+    if (useSinglePass) {
+      const singlePass = await runSinglePassTopicGeneration({
+        transcript: args.transcript,
+        videoInfo: args.videoInfo,
+        language: args.language,
+        model,
+        signal: args.signal,
+      });
+      quoteTopics = filterExcluded(singlePass.topics, excludedKeys).slice(0, MAX_TOPICS);
+      modelUsed = singlePass.modelUsed || model;
+      if (quoteTopics.length) generationStrategy = 'single-pass';
+    } else {
+      const chunked = await runChunkedReducePipeline({
+        transcript: args.transcript,
+        videoInfo: args.videoInfo,
+        language: args.language,
+        model,
+        signal: args.signal,
+      });
+      quoteTopics = filterExcluded(chunked.topics, excludedKeys).slice(0, MAX_TOPICS);
+      candidateTopics = chunked.candidates;
+      modelUsed = chunked.modelUsed || model;
+      if (quoteTopics.length) generationStrategy = 'chunked-reduce';
+    }
   }
 
   if (!quoteTopics.length) {
     quoteTopics = filterExcluded(buildFallbackQuoteTopics(args.transcript, MAX_TOPICS), excludedKeys);
-    modelUsed ||= smartModel;
+    modelUsed ||= model;
     generationStrategy = 'local-fallback';
   }
 
@@ -580,19 +842,168 @@ export async function generateTopics(args: GenerateTopicsArgs): Promise<Generate
   };
 }
 
-export async function generateSummary(args: CommonArgs) {
-  const prompt = buildSummaryPrompt(args);
-  return generateStructuredContent(prompt, summaryTakeawaysSchema, {
-    timeoutMs: AI_TIMEOUT,
-    signal: args.signal,
-    temperature: 0.4,
+function parseSummaryTakeaways(raw: string): SummaryTakeaway[] {
+  let parsedTakeaways: RecoveredTakeaway[] = [];
+  try {
+    parsedTakeaways = normalizeTakeawaysPayload(safeJsonParse(raw));
+  } catch {
+    // fall through to partial recovery
+  }
+  if (parsedTakeaways.length < 4) {
+    const recovered = recoverPartialTakeaways(raw);
+    if (recovered) parsedTakeaways = recovered;
+  }
+  return summaryTakeawaysSchema.parse({ takeaways: parsedTakeaways }).takeaways;
+}
+
+function buildSummaryChunkPrompt(args: {
+  chunk: TranscriptChunk;
+  videoInfo?: VideoInfo;
+  language?: string;
+}): string {
+  return `You are summarizing one section of a video transcript.
+
+${formatVideoInfo(args.videoInfo, args.language)}
+
+Return ONLY a JSON object: { "takeaways": [...] }
+Create 1-2 takeaways from this section. Each takeaway must include:
+- label: short tag
+- insight: one concise sentence grounded in the transcript
+- timestamps: 1-2 references {label?, time(seconds)}
+
+Section transcript:
+${formatTranscriptWithTimestamps(args.chunk.segments)}`;
+}
+
+function buildSummaryReducePrompt(args: {
+  candidates: SummaryTakeaway[];
+  videoInfo?: VideoInfo;
+  language?: string;
+}): string {
+  return `You are consolidating candidate video takeaways.
+
+${formatVideoInfo(args.videoInfo, args.language)}
+
+Return ONLY a JSON object: { "takeaways": [...] }
+Select and merge these candidates into 5-8 final takeaways. Preserve useful timestamps.
+
+Candidates:
+${JSON.stringify({ takeaways: args.candidates }, null, 2)}`;
+}
+
+function dedupeTakeaways(takeaways: SummaryTakeaway[]): SummaryTakeaway[] {
+  const seen = new Set<string>();
+  const out: SummaryTakeaway[] = [];
+  for (const item of takeaways) {
+    const key = `${item.label.trim().toLowerCase()}|${item.insight.trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function preferredSummaryProvider(): string | undefined {
+  return availableProviders().includes('deepseek') ? 'deepseek' : undefined;
+}
+
+async function runSinglePassSummaryGeneration(args: CommonArgs & { model: string }): Promise<SummaryTakeaway[]> {
+  const provider = preferredSummaryProvider();
+  const model = provider ? getProviderModelDefaults(provider).fastModel : args.model;
+  try {
+    const raw = await generateAIResult<unknown>(buildSummaryPrompt(args), {
+      provider,
+      model,
+      signal: args.signal,
+      temperature: 0.4,
+      maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+    });
+    const takeaways = parseSummaryTakeaways(raw.text);
+    return takeaways.length >= 4 ? takeaways.slice(0, 8) : [];
+  } catch (error) {
+    console.warn('[generate-summary] single-pass failed:', (error as Error).message);
+    return [];
+  }
+}
+
+async function runChunkedSummaryGeneration(args: CommonArgs & { model: string }): Promise<SummaryTakeaway[]> {
+  const chunks = chunkTranscriptForTopics(args.transcript);
+  if (!chunks.length || args.signal?.aborted) return [];
+  const provider = preferredSummaryProvider();
+  const model = provider ? getProviderModelDefaults(provider).fastModel : args.model;
+  console.log(
+    `[generate-summary] chunked pipeline (${chunks.length} chunks, provider=${provider ?? 'default'}, model=${model})`,
+  );
+
+  const chunkResults = await mapWithConcurrency(chunks, getChunkConcurrency(), async (chunk) => {
+    try {
+      const raw = await generateAIResult<unknown>(
+        buildSummaryChunkPrompt({
+          chunk,
+          videoInfo: args.videoInfo,
+          language: args.language,
+        }),
+        {
+          provider,
+          model,
+          signal: args.signal,
+          temperature: 0.4,
+          maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+        },
+      );
+      return parseSummaryTakeaways(raw.text).slice(0, 2);
+    } catch (error) {
+      console.warn(`[generate-summary] chunk ${chunk.id} failed:`, (error as Error).message);
+      return [];
+    }
   });
+
+  const candidates = dedupeTakeaways(chunkResults.flat());
+  if (!candidates.length || args.signal?.aborted) return [];
+  if (candidates.length <= 8) return candidates;
+
+  try {
+    const raw = await generateAIResult<unknown>(
+      buildSummaryReducePrompt({
+        candidates,
+        videoInfo: args.videoInfo,
+        language: args.language,
+      }),
+      {
+        provider,
+        model,
+        signal: args.signal,
+        temperature: 0.3,
+        maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+      },
+    );
+    const reduced = dedupeTakeaways(parseSummaryTakeaways(raw.text));
+    if (reduced.length >= 4) return reduced.slice(0, 8);
+  } catch (error) {
+    console.warn('[generate-summary] reduce failed:', (error as Error).message);
+  }
+
+  return candidates.slice(0, 8);
+}
+
+export async function generateSummary(args: CommonArgs): Promise<{ takeaways: SummaryTakeaway[] }> {
+  const model = getProviderModelDefaults().fastModel;
+  const takeaways = isShortVideo(args.transcript)
+    ? await runSinglePassSummaryGeneration({ ...args, model })
+    : await runChunkedSummaryGeneration({ ...args, model });
+
+  if (takeaways.length) return { takeaways };
+
+  const fallback = buildMinimalTakeawaysFallback(args.transcript);
+  if (fallback.length) {
+    console.log(`[generate-summary] local fallback (${fallback.length} sections)`);
+  }
+  return { takeaways: fallback };
 }
 
 export async function generateQuotes(args: CommonArgs) {
   const prompt = buildQuotesPrompt(args);
   return generateStructuredContent(prompt, topQuotesSchema, {
-    timeoutMs: AI_TIMEOUT,
     signal: args.signal,
     temperature: 0.4,
   });
@@ -603,7 +1014,6 @@ export async function generateQuestions(
 ) {
   const prompt = buildQuestionsPrompt(args);
   return generateStructuredContent(prompt, suggestedQuestionsSchema, {
-    timeoutMs: AI_TIMEOUT,
     signal: args.signal,
     temperature: 0.6,
   });
@@ -705,7 +1115,6 @@ export async function generateQuickPreview(args: CommonArgs): Promise<{ preview:
       language: args.language,
     });
     const result = await generateStructuredContent(prompt, quickPreviewSchema, {
-      timeoutMs: PREVIEW_TIMEOUT,
       signal: args.signal,
       temperature: 0.7,
     });
@@ -737,7 +1146,6 @@ export async function generateChat(args: {
   });
   return generateStructuredContent(prompt, chatResponseSchema, {
     systemPrompt,
-    timeoutMs: AI_TIMEOUT,
     signal: args.signal,
     temperature: 0.3,
   });

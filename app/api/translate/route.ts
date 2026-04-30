@@ -5,7 +5,6 @@ import type { TranslationContext, TranslationScenario } from '@/lib/types';
 import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
 
 export const runtime = 'nodejs';
-export const maxDuration = 30;
 
 const translationContextSchema = z
   .object({

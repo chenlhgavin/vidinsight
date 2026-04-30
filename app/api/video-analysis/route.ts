@@ -10,7 +10,6 @@ import { recordGuestUsage } from '@/lib/guest-usage';
 import type { TopicCandidate, TranscriptSegment, VideoInfo } from '@/lib/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 180;
 
 export const GET = withSecurity(SECURITY_PRESETS.PUBLIC, async (request) => {
   const { searchParams } = new URL(request.url);

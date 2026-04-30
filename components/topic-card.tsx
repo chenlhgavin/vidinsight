@@ -81,11 +81,11 @@ export function TopicCard({
         aria-hidden
         className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-foreground"
         style={{
-          background: `linear-gradient(135deg, ${color}, ${color}40)`,
+          background: `linear-gradient(135deg, ${color}, color-mix(in srgb, ${color} 35%, transparent))`,
           boxShadow: `inset 0 1px 0 rgba(255,255,255,0.12)`,
         }}
       >
-        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-black/70">
+        <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-black drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]">
           {String(index + 1).padStart(2, '0')}
         </span>
       </span>

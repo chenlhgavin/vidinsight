@@ -6,16 +6,17 @@ import {
   type ProviderGenerateResult,
 } from './types';
 
-const MINIMAX_BASE = process.env.MINIMAX_API_BASE || 'https://api.minimax.chat';
-const ENDPOINT = `${MINIMAX_BASE}/v1/text/chatcompletion_v2`;
+const DEEPSEEK_BASE = process.env.DEEPSEEK_API_BASE_URL || 'https://api.deepseek.com/v1';
+const ENDPOINT = `${DEEPSEEK_BASE}/chat/completions`;
 
+const MODEL_CASCADE = ['deepseek-v4-flash'] as const;
 const RETRYABLE_STATUS = [408, 429, 500, 502, 503, 504];
-const MAX_RETRIES = 2;
-const BACKOFF_MS = [500, 2000];
-const DEFAULT_MAX_COMPLETION_TOKENS = 10_240;
-const MIN_STRUCTURED_COMPLETION_TOKENS = 10_240;
+const MAX_RETRIES = 1;
+const BACKOFF_MS = [500, 1500];
+const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
+const MIN_OUTPUT_TOKENS = 8192;
 
-interface MinimaxResponse {
+interface OpenAIChatResponse {
   id?: string;
   choices?: {
     message?: { content?: string; role?: string };
@@ -23,21 +24,26 @@ interface MinimaxResponse {
   }[];
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   model?: string;
-  base_resp?: { status_code?: number; status_msg?: string };
 }
 
 function isRetryable(status: number): boolean {
   return RETRYABLE_STATUS.includes(status);
 }
 
+function buildModelList(requested?: string): string[] {
+  if (!requested) return [...MODEL_CASCADE];
+  const rest = MODEL_CASCADE.filter((m) => m !== requested);
+  return [requested, ...rest];
+}
+
 async function callOnce<T>(
   params: ProviderGenerateParams<T>,
   model: string,
 ): Promise<ProviderGenerateResult<T>> {
-  const apiKey = process.env.MINIMAX_API_KEY;
+  const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    throw new ProviderError('MINIMAX_API_KEY missing', {
-      providerName: 'minimax',
+    throw new ProviderError('DEEPSEEK_API_KEY missing', {
+      providerName: 'deepseek',
       retryable: false,
     });
   }
@@ -46,21 +52,21 @@ async function callOnce<T>(
   if (params.systemPrompt) messages.push({ role: 'system', content: params.systemPrompt });
   messages.push({ role: 'user', content: params.prompt });
 
-  const requestedMaxTokens = params.maxOutputTokens ?? DEFAULT_MAX_COMPLETION_TOKENS;
-  const minCompletionTokens = params.zodSchema
-    ? MIN_STRUCTURED_COMPLETION_TOKENS
-    : DEFAULT_MAX_COMPLETION_TOKENS;
-  const maxTokens = Math.max(requestedMaxTokens, minCompletionTokens);
+  const requestedMaxTokens = params.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
+  const maxTokens = Math.max(requestedMaxTokens, MIN_OUTPUT_TOKENS);
 
   const body: Record<string, unknown> = {
     model,
     messages,
     temperature: params.temperature ?? 0.4,
     top_p: params.topP ?? 0.9,
-    max_completion_tokens: maxTokens,
+    max_tokens: maxTokens,
     stream: false,
-    reasoning_split: false,
   };
+
+  if (params.zodSchema) {
+    body.response_format = { type: 'json_object' };
+  }
 
   const controller = new AbortController();
   const timeoutMs = params.timeoutMs;
@@ -105,7 +111,7 @@ async function callOnce<T>(
         ? `request timed out after ${timeoutMs}ms`
         : `network error: ${err}`;
     throw new ProviderError(message, {
-      providerName: 'minimax',
+      providerName: 'deepseek',
       retryable: aborted ? Boolean(timedOut && params.retryOnTimeout) : true,
     });
   }
@@ -114,65 +120,57 @@ async function callOnce<T>(
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new ProviderError(`minimax ${resp.status}: ${text.slice(0, 200)}`, {
+    throw new ProviderError(`deepseek ${resp.status}: ${text.slice(0, 200)}`, {
       status: resp.status,
       retryable: isRetryable(resp.status),
-      providerName: 'minimax',
+      providerName: 'deepseek',
     });
   }
 
-  let data: MinimaxResponse;
+  let data: OpenAIChatResponse;
   try {
-    data = (await resp.json()) as MinimaxResponse;
+    data = (await resp.json()) as OpenAIChatResponse;
   } catch (err) {
     throw new ProviderError(`invalid json: ${err}`, {
-      providerName: 'minimax',
+      providerName: 'deepseek',
       retryable: true,
     });
   }
 
-  if (data.base_resp?.status_code && data.base_resp.status_code !== 0) {
-    const code = data.base_resp.status_code;
-    throw new ProviderError(
-      `minimax base_resp ${code}: ${data.base_resp.status_msg ?? ''}`,
-      {
-        status: code,
-        retryable: isRetryable(code),
-        providerName: 'minimax',
-      },
-    );
-  }
-
-  const rawContent = data.choices?.[0]?.message?.content ?? '';
-  const finishReason = data.choices?.[0]?.finish_reason;
-  const text = stripReasoningBlocks(rawContent);
+  const text = data.choices?.[0]?.message?.content?.trim() ?? '';
   if (!text) {
-    const reasoningOnly = rawContent.length > 0;
+    const finishReason = data.choices?.[0]?.finish_reason ?? 'unknown';
     const usage = data.usage
       ? `, usage=${JSON.stringify({
           prompt_tokens: data.usage.prompt_tokens,
           completion_tokens: data.usage.completion_tokens,
           total_tokens: data.usage.total_tokens,
-          requested_max_completion_tokens: maxTokens,
+          requested_max_tokens: maxTokens,
         })}`
-      : `, requested_max_completion_tokens=${maxTokens}`;
-    const detail = reasoningOnly
-      ? `reasoning-only response (finish_reason=${finishReason ?? 'unknown'}, raw_len=${rawContent.length}${usage})`
-      : `no content (finish_reason=${finishReason ?? 'unknown'}${usage})`;
-    throw new ProviderError(`empty completion: ${detail}`, {
-      providerName: 'minimax',
+      : `, requested_max_tokens=${maxTokens}`;
+    throw new ProviderError(`empty completion (finish_reason=${finishReason}${usage})`, {
+      providerName: 'deepseek',
       retryable: true,
     });
   }
 
   let parsed: T | undefined;
   if (params.zodSchema) {
-    const json = extractJson(text);
+    let json: unknown;
+    try {
+      json = extractJson(text);
+    } catch (err) {
+      const preview = text.replace(/\s+/g, ' ').slice(0, 300);
+      throw new ProviderError(`no JSON in completion: ${(err as Error).message}; preview=${JSON.stringify(preview)}`, {
+        providerName: 'deepseek',
+        retryable: true,
+      });
+    }
     const result = params.zodSchema.safeParse(json);
     if (result.success) parsed = result.data;
     else {
       throw new ProviderError(`schema validation failed: ${result.error.message}`, {
-        providerName: 'minimax',
+        providerName: 'deepseek',
         retryable: false,
       });
     }
@@ -182,20 +180,13 @@ async function callOnce<T>(
     text,
     parsed,
     modelUsed: data.model ?? model,
-    providerName: 'minimax',
+    providerName: 'deepseek',
     tokensUsed: {
       input: data.usage?.prompt_tokens,
       output: data.usage?.completion_tokens,
     },
     raw: data,
   };
-}
-
-function stripReasoningBlocks(text: string): string {
-  return text
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-    .trim();
 }
 
 function extractJson(text: string): unknown {
@@ -229,7 +220,7 @@ function extractJson(text: string): unknown {
 
 async function sleep(ms: number, signal?: AbortSignal) {
   if (signal?.aborted) {
-    throw new ProviderError('request aborted', { providerName: 'minimax', retryable: false });
+    throw new ProviderError('request aborted', { providerName: 'deepseek', retryable: false });
   }
   return new Promise<void>((resolve, reject) => {
     const timeoutId = setTimeout(() => {
@@ -238,7 +229,7 @@ async function sleep(ms: number, signal?: AbortSignal) {
     }, ms);
     const onAbort = () => {
       cleanup();
-      reject(new ProviderError('request aborted', { providerName: 'minimax', retryable: false }));
+      reject(new ProviderError('request aborted', { providerName: 'deepseek', retryable: false }));
     };
     const cleanup = () => {
       clearTimeout(timeoutId);
@@ -248,28 +239,43 @@ async function sleep(ms: number, signal?: AbortSignal) {
   });
 }
 
-export function createMiniMaxAdapter(): ProviderAdapter {
+export function createDeepSeekAdapter(): ProviderAdapter {
   return {
-    name: 'minimax',
-    defaultModel: getProviderDefaultModel('minimax'),
+    name: 'deepseek',
+    defaultModel: getProviderDefaultModel('deepseek'),
     async generate<T>(params: ProviderGenerateParams<T>): Promise<ProviderGenerateResult<T>> {
-      const model = params.model ?? this.defaultModel;
-      const maxRetries = params.maxRetries ?? MAX_RETRIES;
-      let attempt = 0;
+      const models = buildModelList(params.model);
+      const maxRetriesPerModel = params.maxRetries ?? MAX_RETRIES;
       let lastErr: ProviderError | undefined;
-      while (attempt <= maxRetries) {
-        try {
-          return await callOnce(params, model);
-        } catch (err) {
-          if (!(err instanceof ProviderError)) throw err;
-          lastErr = err;
-          if (!err.retryable || attempt === maxRetries || params.signal?.aborted) throw err;
-          const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
-          await sleep(delay, params.signal);
-          attempt++;
+
+      for (const model of models) {
+        let attempt = 0;
+        while (attempt <= maxRetriesPerModel) {
+          try {
+            return await callOnce(params, model);
+          } catch (err) {
+            if (!(err instanceof ProviderError)) throw err;
+            lastErr = err;
+            if (params.signal?.aborted) throw err;
+            if (!err.retryable) {
+              // non-retryable on this model — try next model in cascade
+              break;
+            }
+            if (attempt === maxRetriesPerModel) {
+              // exhausted retries on this model — try next model in cascade
+              console.warn(
+                `[deepseek] ${model} failed after ${attempt + 1} attempts (${err.message}); cascading to next model`,
+              );
+              break;
+            }
+            const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
+            await sleep(delay, params.signal);
+            attempt++;
+          }
         }
       }
-      throw lastErr ?? new ProviderError('unknown error', { providerName: 'minimax', retryable: false });
+
+      throw lastErr ?? new ProviderError('all deepseek models failed', { providerName: 'deepseek', retryable: false });
     },
   };
 }

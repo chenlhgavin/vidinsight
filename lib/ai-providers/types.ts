@@ -1,6 +1,11 @@
 import type { z } from 'zod';
 
-export type ProviderName = 'minimax';
+export type ProviderKey = 'deepseek' | 'minimax';
+
+export interface ProviderBehavior {
+  forceFullTranscriptTopicGeneration: boolean;
+  forceSmartModeOnClient: boolean;
+}
 
 export interface ProviderGenerateParams<T = unknown> {
   prompt: string;
@@ -13,6 +18,7 @@ export interface ProviderGenerateParams<T = unknown> {
   maxRetries?: number;
   retryOnTimeout?: boolean;
   zodSchema?: z.ZodType<T>;
+  schemaName?: string;
   metadata?: Record<string, unknown>;
   signal?: AbortSignal;
 }
@@ -21,13 +27,13 @@ export interface ProviderGenerateResult<T = unknown> {
   text: string;
   parsed?: T;
   modelUsed: string;
-  providerName: ProviderName;
+  providerName: ProviderKey;
   tokensUsed?: { input?: number; output?: number };
   raw?: unknown;
 }
 
 export interface ProviderAdapter {
-  name: ProviderName;
+  name: ProviderKey;
   defaultModel: string;
   generate<T>(p: ProviderGenerateParams<T>): Promise<ProviderGenerateResult<T>>;
 }
@@ -35,10 +41,10 @@ export interface ProviderAdapter {
 export class ProviderError extends Error {
   status?: number;
   retryable: boolean;
-  providerName: ProviderName;
+  providerName: ProviderKey;
   constructor(
     message: string,
-    opts: { status?: number; retryable?: boolean; providerName: ProviderName },
+    opts: { status?: number; retryable?: boolean; providerName: ProviderKey },
   ) {
     super(message);
     this.name = 'ProviderError';

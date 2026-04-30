@@ -4,7 +4,6 @@ import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
 import { gateGuestForGeneration, finalizeGuestResponse } from '@/lib/guest-gate';
 
 export const runtime = 'nodejs';
-export const maxDuration = 180;
 
 export const POST = withSecurity(SECURITY_PRESETS.AI_GENERATION, async (request, ctx) => {
   const gate = await gateGuestForGeneration(request, ctx, { isPrimaryAnalysis: false });
